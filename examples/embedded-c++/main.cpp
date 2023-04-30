@@ -3,9 +3,19 @@
 #include <string>
 #include <vector>
 #include <sstream>
+#include <random> 
+#include <algorithm>
 #include "duckdb.hpp"
 
-using namespace duckdb;
+using namespace duckdb; 
+
+struct root_pred {
+	string table;
+	string column; 
+	char op;
+	int value; 
+}; 
+
 
 int load_partsupp(DuckDB db, Connection con) {
 	string fname ("../../../data/partsupp.csv");
@@ -34,7 +44,6 @@ int load_partsupp(DuckDB db, Connection con) {
 	        int32_t supp_key = std::stoi(content[i][1]); 
 		int32_t avail = std::stoi(content[i][2]); 
 		float cost = std::stof(content[i][3]);
-		//std::cout << typeid(content[i][4]).name() << std::endl; 	
 		string comment = content[i][4]; 	
 		appender.AppendRow(key, supp_key, avail, cost); 
 	}
@@ -53,6 +62,22 @@ int load_test(DuckDB db, Connection con){
 	appender.Flush(); 
 	return 0; 
 }
+
+vector<string> generate_predicates(Connection con, string table){
+	vector<string> vect; 
+	char str[1024]; 
+	sprintf(str, "SELECT column_name, data_type from information_schema.columns where table_name = 'partsupp';", table); 
+	//std::unique_ptr<PreparedStatement> prepare = con.Prepare("SELECT column_name, data_type from information_schema.columns where table_name = ?"); 
+
+	//std::unique_ptr<QueryResult> result = prepare->Execute("table"); 
+	unique_ptr<QueryResult> result = con.Query(str);
+	unique_ptr<DataChunk> test1 = result->Fetch(); //returns pointer to datachunk type 
+	Value test2 = test1->GetValue(0,0); 
+	string test3 = test2.ToString(); 
+	std::cout<<test3<<std::endl;  
+	return vect; 	
+}
+
 int main() {
 	DuckDB db(nullptr);
 	Connection con(db);
@@ -62,4 +87,5 @@ int main() {
 
 	auto result = con.Query("SELECT * FROM partsupp limit 10;");
 	result->Print();
+	generate_predicates(con, "partsupp");
 }
