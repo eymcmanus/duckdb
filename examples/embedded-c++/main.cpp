@@ -9,11 +9,19 @@
 
 using namespace duckdb; 
 
-struct root_pred {
+class Root_Pred {
+	public:
 	string table;
 	string column; 
 	char op;
-	int value; 
+	float value;
+       Root_Pred(string t, string c, char o, float v)
+       {
+	table = t;
+	column = c; 
+	op = o; 
+	value = v; 
+       }	       
 }; 
 
 
@@ -63,23 +71,47 @@ int load_test(DuckDB db, Connection con){
 	return 0; 
 }
 
-void generate_predicates(Connection con, string table){
-	vector  <string> vect; 
-	char str[1024]; 
-	sprintf(str, "SELECT column_name, data_type from information_schema.columns where table_name = 'partsupp';", table); 
-	//std::unique_ptr<PreparedStatement> prepare = con.Prepare("SELECT column_name, data_type from information_schema.columns where table_name = ?"); 
+void generate_predicates(Connection con, string table, int vol){
+	vector  <string> vect;
+        vector <Root_Pred> root_vect; 	
+	vector <char> ops = {"=", ">"}; 
+	
+	unique_ptr<QueryResult> result = con.Query("SELECT * FROM partsupp");
+	auto heightr = con.Query("SELECT COUNT(*) from partsupp"); 
+	auto count = ((heightr->Fetch())->GetValue(0,0)).DefaultTryCastAs(LogicalType::HUGEINT);
+	// put this part inside a while, until we have vol predicates
+	//pick a random column
+	std::mt19937 generator(std::random_device{}());
+	std::uniform_int_distribution<std::size_t> distribution(0, (result->names).size() - 1);
+        std::uniform_int_distribution<std::size_t> distwo(0, count-1); 	
+	
+	while(root_vect.size() < vol){
+	std::size_t colin = distribution(generator);
+	std::size_t rowin = distwo(generator);
+	string col = (result->names)[colin]; 
+	int flip = rand()%1; 
+	char o = ops[flip]; 
+	float x = ((result->Fetch())->GetValue(colin, rowin)).DefaultTryCastAs(LogicalType::HUGEINT); 
+        Root_Pred new_pred = Root_Pred("partsupp", col, o, x);;
+        root_vect.push_back(new_pred);
+	// items in vector 
+	}
+	//string col = (result->names)[colin]; 
+	//beginning the query result iterator via the begin on the query result
+	//auto test = result->begin();
+	//grab the current row from the iterator product
+        //auto help = test.current_row; 	
+//	std::cout>>(help.GetValue<idx_t>(1)).ToString()>>"\n";
 
-	//std::unique_ptr<QueryResult> result = prepare->Execute("table"); 
-	unique_ptr<QueryResult> result = con.Query(str);
-	unique_ptr<DataChunk> test1 = result->Fetch(); //returns pointer to datachunk type 
-	int a = test1->size();
-        for (int i; i < test1->size(); i++)
-	{ 
-	 Value v = test1->GetValue(i, 0);
-	 string s = v.ToString(); 
-	 vect.push_back(s);  
-	 std::cout<<s; 
-	}	 
+
+
+	//unique_ptr<DataChunk> test1 = result->Fetch(); //returns pointer to datachunk type 
+	//for (idx_t col = 0; col < test1-> ColumnCount(); col++){
+	//	for (idx_t row = 0; row < test1->size(); row++){
+	//		auto  lvalue = test1->GetValue(col, row).DefaultCastAs(LogicalType::VARCHAR);
+		   //    vect.push_back(lvalue); 	
+	//	}
+	//}	
 	//return vect; 	
 }
 
@@ -92,5 +124,6 @@ int main() {
 
 	auto result = con.Query("SELECT * FROM partsupp limit 10;");
 	//result->Print();
-	generate_predicates(con, "partsupp");
+	generate_predicates(con, "partsupp", 50);
+	return 0; 
 }
