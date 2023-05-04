@@ -118,7 +118,9 @@ vector <And_Root_Pred>  generate_predicates(Connection con, string table, int vo
 	vector <char> ops = {'=', '>'}; 
 	
 	vector <And_Root_Pred> and_preds; 
-		
+	
+	unordered_set<string> used_cols; 
+
 	unique_ptr<QueryResult> result = con.Query("SELECT * FROM partsupp");
 	auto heightr = con.Query("SELECT COUNT(*) from partsupp"); 
 	auto count = ((heightr->Fetch())->GetValue(0,0)).DefaultTryCastAs(duckdb::LogicalType::HUGEINT); 
@@ -147,6 +149,11 @@ vector <And_Root_Pred>  generate_predicates(Connection con, string table, int vo
 	for (int i = 0; i < vol ; i ++){
 		int idx1 = dist(g); 
 		int idx2 = dist(g); 
+
+		while(root_vect[idx1].column == root_vect[idx2].column){
+			idx1 = dist(g); 
+			idx2 = dist(g); 
+		}
 		and_preds.emplace_back(root_vect[idx1], root_vect[idx2]); 
 	}
 	//string col = (result->names)[colin]; 
@@ -211,7 +218,14 @@ int main() {
 	auto result = con.Query("SELECT * FROM partsupp limit 10;");
 	//result->Print();
 	auto pred = generate_predicates(con, "partsupp", 100);
+	std::cout<<pred[5].ToString()<<std::endl; 
 	auto interventions = generate_one_hot_vectors(con, pred);
-	print_vector(interventions[2]);
-	return 0; 
+	//print_vector(interventions[0]);
+	
+	 auto countresult =con.Query("SELECT COUNT(*) FROM partsupp WHERE PS_SUPPLYCOST > 906.12 AND PS_PARTKEY = 74753.0");
+        idx_t count = countresult->GetValue(0, 0).GetValue<int64_t>();
+	std::cout << "The query returned " << count << " rows" << std::endl; 
+
+
+       return 0; 	
 }
