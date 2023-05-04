@@ -45,6 +45,16 @@ class And_Root_Pred {
 	}
 };
 
+void print_vector(const duckdb::vector<bool>& vec){
+	for (auto val: vec){
+		std::cout<< val << " "; 
+	}
+	
+
+	}
+
+
+
 bool evaluate_predicate(const Root_Pred& pred,  const duckdb::Value& val) {
     switch (pred.op) {
         case '=':
@@ -202,6 +212,6 @@ int main() {
 	//result->Print();
 	auto pred = generate_predicates(con, "partsupp", 100);
 	auto interventions = generate_one_hot_vectors(con, pred);
-
+	print_vector(interventions[2]);
 	return 0; 
 }
