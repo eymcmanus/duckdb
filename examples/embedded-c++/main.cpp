@@ -21,9 +21,29 @@ class Root_Pred {
 	column = c; 
 	op = o; 
 	value = v; 
-       }	       
+       }
+	string ToString() const;        
 }; 
 
+string Root_Pred::ToString() const{
+	std::stringstream ss; 
+	ss<<table<<"."<<column<<" "<<op<<" "<<value; 
+	return ss.str(); 
+
+}
+ 
+class And_Root_Pred {
+    public:
+        Root_Pred left;
+        Root_Pred right;
+        And_Root_Pred(Root_Pred l, Root_Pred r) : left(l), right(r) {}
+
+	std::string ToString() const{
+		std::stringstream ss; 
+		ss << "(" << left.ToString() << " AND " << right.ToString() << ")"; 
+		return ss.str(); 
+	}
+};
 
 int load_partsupp(DuckDB db, Connection con) {
 	string fname ("../../../data/partsupp.csv");
@@ -71,30 +91,45 @@ int load_test(DuckDB db, Connection con){
 	return 0; 
 }
 
-void generate_predicates(Connection con, string table, int vol){
+vector <And_Root_Pred>  generate_predicates(Connection con, string table, int vol){
 	vector  <string> vect;
         vector <Root_Pred> root_vect; 	
-	vector <char> ops = {"=", ">"}; 
+	vector <char> ops = {'=', '>'}; 
 	
+	vector <And_Root_Pred> and_preds; 
+		
 	unique_ptr<QueryResult> result = con.Query("SELECT * FROM partsupp");
 	auto heightr = con.Query("SELECT COUNT(*) from partsupp"); 
-	auto count = ((heightr->Fetch())->GetValue(0,0)).DefaultTryCastAs(LogicalType::HUGEINT);
+	auto count = ((heightr->Fetch())->GetValue(0,0)).DefaultTryCastAs(duckdb::LogicalType::HUGEINT); 
+	std::size_t count_size_t = static_cast<std::size_t>(count); 
 	// put this part inside a while, until we have vol predicates
 	//pick a random column
 	std::mt19937 generator(std::random_device{}());
 	std::uniform_int_distribution<std::size_t> distribution(0, (result->names).size() - 1);
-        std::uniform_int_distribution<std::size_t> distwo(0, count-1); 	
-	
-	while(root_vect.size() < vol){
-	std::size_t colin = distribution(generator);
-	std::size_t rowin = distwo(generator);
-	string col = (result->names)[colin]; 
-	int flip = rand()%1; 
-	char o = ops[flip]; 
-	float x = ((result->Fetch())->GetValue(colin, rowin)).DefaultTryCastAs(LogicalType::HUGEINT); 
-        Root_Pred new_pred = Root_Pred("partsupp", col, o, x);;
-        root_vect.push_back(new_pred);
-	// items in vector 
+        std::uniform_int_distribution<std::size_t> distwo(0, count_size_t-1); 	
+	while(root_vect.size() < (vol*2)){
+		std::size_t colin = distribution(generator);
+		std::size_t rowin = distwo(generator);
+		string col = (result->names)[colin]; 
+		int flip = rand()%2; 
+		char o = ops[flip];
+		float x = static_cast<float>(std::stod(result->Fetch()->GetValue(colin, rowin).ToString()));
+		Root_Pred new_pred = Root_Pred("partsupp", col, o, x);;
+        	root_vect.push_back(new_pred);
+	}
+	// now to generate the and predicates 
+	for (const auto& Root_Pred : root_vect) {
+  		std::cout << Root_Pred.ToString() << std::endl;
+		}	
+	std::random_device rd; 
+	std::mt19937 g(rd()); 
+	std::shuffle(root_vect.begin(), root_vect.end(), g); 
+
+	std::uniform_int_distribution<int> dist(0, root_vect.size()-1); 
+	for (int i = 0; i < vol ; i ++){
+		int idx1 = dist(g); 
+		int idx2 = dist(g); 
+		and_preds.emplace_back(root_vect[idx1], root_vect[idx2]); 
 	}
 	//string col = (result->names)[colin]; 
 	//beginning the query result iterator via the begin on the query result
@@ -112,7 +147,7 @@ void generate_predicates(Connection con, string table, int vol){
 		   //    vect.push_back(lvalue); 	
 	//	}
 	//}	
-	//return vect; 	
+	return and_preds; 	
 }
 
 int main() {
@@ -124,6 +159,7 @@ int main() {
 
 	auto result = con.Query("SELECT * FROM partsupp limit 10;");
 	//result->Print();
-	generate_predicates(con, "partsupp", 50);
+	auto pred = generate_predicates(con, "partsupp", 100);
+	std::cout << pred[7].ToString() << std::endl; 
 	return 0; 
 }
