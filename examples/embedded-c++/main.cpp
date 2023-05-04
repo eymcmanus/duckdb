@@ -14,7 +14,7 @@ class Root_Pred {
 	string table;
 	string column; 
 	char op;
-	float value;
+	Value value;
        Root_Pred(string t, string c, char o, float v)
        {
 	table = t;
@@ -45,6 +45,17 @@ class And_Root_Pred {
 	}
 };
 
+bool evaluate_predicate(const Root_Pred& pred,  const duckdb::Value& val) {
+    switch (pred.op) {
+        case '=':
+            return val.DefaultCastAs(pred.value.type()) == pred.value;
+        case '>':
+            return val.DefaultCastAs(pred.value.type()) >= pred.value;
+        default:
+            throw std::runtime_error("Unsupported predicate operation");
+	}
+
+}
 int load_partsupp(DuckDB db, Connection con) {
 	string fname ("../../../data/partsupp.csv");
 	con.Query("CREATE TABLE partsupp (PS_PARTKEY int, PS_SUPPKEY int, PS_AVAILQTY int, PS_SUPPLYCOST float);");
@@ -118,9 +129,6 @@ vector <And_Root_Pred>  generate_predicates(Connection con, string table, int vo
         	root_vect.push_back(new_pred);
 	}
 	// now to generate the and predicates 
-	for (const auto& Root_Pred : root_vect) {
-  		std::cout << Root_Pred.ToString() << std::endl;
-		}	
 	std::random_device rd; 
 	std::mt19937 g(rd()); 
 	std::shuffle(root_vect.begin(), root_vect.end(), g); 
@@ -150,6 +158,39 @@ vector <And_Root_Pred>  generate_predicates(Connection con, string table, int vo
 	return and_preds; 	
 }
 
+
+vector<vector<bool>> generate_one_hot_vectors(Connection con,vector<And_Root_Pred> preds){
+	
+	auto result = con.Query("SELECT * from partsupp");  
+	vector<vector<bool>> one_hot_vectors(result->Fetch()->ColumnCount(), vector<bool>(result->Fetch()->size())); 
+
+	vector<string> col_names = result->names;
+	vector<LogicalType> col_types = result->types; 
+
+	while(auto chunk =  result->Fetch()){
+		for (idx_t row_idx = 0; row_idx < chunk->size(); row_idx++){
+			auto &col = chunk->data[row_idx]; 
+			for (idx_t col_idx = 0; col_idx < chunk->ColumnCount(); col_idx++){
+				bool match = true;
+				auto& col_name = col_names[col_idx]; 
+				const auto& val = chunk->GetValue(col_idx, row_idx);
+				for (const auto& pred : preds){
+					if (col_name != pred.left.column){
+						continue;
+					}
+					if (!evaluate_predicate(pred.left, val) || !evaluate_predicate(pred.right, val)){
+						match = false; 
+						break;
+					}}
+				if (match){
+					one_hot_vectors[col_idx][row_idx] = true;
+				}
+
+			}
+		}
+	}
+	return one_hot_vectors; 
+}
 int main() {
 	DuckDB db(nullptr);
 	Connection con(db);
@@ -160,6 +201,7 @@ int main() {
 	auto result = con.Query("SELECT * FROM partsupp limit 10;");
 	//result->Print();
 	auto pred = generate_predicates(con, "partsupp", 100);
-	std::cout << pred[7].ToString() << std::endl; 
+	auto interventions = generate_one_hot_vectors(con, pred);
+
 	return 0; 
 }
